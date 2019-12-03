@@ -11,13 +11,14 @@ import time
 
 '''PARAMETERS'''
 MAX_SIMULATE_TIME = 20000 # Maximum running time
-LAMBDA = 0.1# Mean arrival rate
-MU = 0.5 # Mean service rate of server
+LAMBDA = 2.0# Mean arrival rate
+MU = 2.5 # Mean service rate of server
 POPULATION = 100000000 # Total jobs available to generate = infinity
 BUFFER = 100000000 # Maximum number of jobs the server can store in its queue length
 REPLICATION = 4 # Number of replications
 ALPHA = 0.1 # 
 RANDOM_SEED = 4321 #Seed for random() function
+
 
 print("START PROGRAM")
 
@@ -30,12 +31,25 @@ p = LAMBDA/MU
 p0 = 1- p
 mean_jobs_system = p / (1 - p)
 var_jobs_system = p / (1 - p) ** 2
+mean_jobs_queue = p**2 / (1-p)
+var_jobs_queue = (p**2 * (1+p-p**2))/(1-p)**2
+mean_response_time = (1 / MU) / (1-p)
+var_response_time = (1/MU**2)/(1-p)**2
+mean_waiting_time = p*((1/MU)/(1-p))
+var_waiting_time = (2-p)*(p*(MU**2*(1-p)**2)) 
+
 
 print("\n----------------------------------THEORETICAL CALCULATION---------------------------------")
 print("\tTrafic intensity:                          %.4f" %p)
 print("\tProbability of 0 jobs in the system:       %.4f" %p0)
 print("\tMean number of jobs in the system:         %.4f" %mean_jobs_system)
 print("\tVariance of number of jobs in the system:  %.4f" %var_jobs_system)
+# print("\tMean number of jobs in queue:              %.4f" %mean_jobs_queue)
+# print("\tVariance numebr of jobs in queue:          %.4f" %var_jobs_queue)
+print("\tMean response time:                        %.4f" %mean_response_time)
+print("\tVariance of response time:                 %.4f" %var_response_time)
+print("\tMean waiting time:                         %.4f" %mean_waiting_time)
+print("\tVariance of waiting time:                  %.4f" %var_waiting_time)
 print("----------------------------------------------------------------------------------------")
 '''
 #####################################################################################################
@@ -52,8 +66,9 @@ class Job:
         self.name = name
         self.arrival_time = arrival_time #time it arrives
         self.serve_time = serve_time #time intervel for serve
-        self.served = 0
-        self.waiting_time = 0;
+        # self.served = 0
+        # self.response_time = 0
+        
 
 class JobGenerator:
     '''
@@ -93,7 +108,7 @@ class JobGenerator:
 
             #Add new job to the list of customer of server
             self.server.job_list.append(new_job)
-            self.server.queue_length+= 1
+            self.server.queue_length += 1
 
             #Check whether the server is in idle state
             if not self.server.server_idle.triggered:
@@ -138,12 +153,12 @@ class Server:
             else:
                 #Last come first serve
                 serve_job = self.job_list.pop(-1)
-                self.queue_length-= 1
-                
+                self.queue_length -= 1
+                replications.waiting_time_list[self.rep].append(self.env.now - serve_job.arrival_time)
                 yield self.env.timeout(serve_job.serve_time)
-                serve_job.waiting_time = self.env.now - serve_job.arrival_time
+                # serve_job.response_time = self.env.now - serve_job.arrival_time
                 #self.waiting_time_list.append(serve_job.waiting_time);
-                replications.waiting_time_list[self.rep].append(serve_job.waiting_time)
+                replications.response_time_list[self.rep].append(self.env.now - serve_job.arrival_time)
                 #replications.total_waiting_time[self.rep] += serve_job.waiting_time
                 #self.total_waiting_time += serve_job.waiting_time
                 replications.job_served[self.rep] += 1 
@@ -170,7 +185,7 @@ class Monitor:
         self.rep = rep
         self.queue_lengths = []
         self.env = env
-        self.server = server;
+        self.server = server
         self.env.process(self.monitor())
 
     def monitor(self):
@@ -192,30 +207,64 @@ start_time = time.time()
 
 '''
 #####################################################################################################
----------------CREATE GLOBAL VARIABLE TO STORE DATA OF ALL REPLICATIONS IN SIMULATION----------------
+--------------CREATE GLOBAL COLLECTION TO STORE DATA OF ALL REPLICATIONS IN SIMULATION---------------
 #####################################################################################################
 '''
-Replications = collections.namedtuple('Replication', ['job_generated', 'job_served', 'arrival_time_list', 'waiting_time_list', 
-'total_waiting_time', 'average_waiting_time', 'idle_time_beginning_list', 'idle_time_duration_list', 'util', 'num_jobs_list'])
+Replications = collections.namedtuple('Replication', [
+    'job_generated', 
+    'job_served', 
+    'arrival_time_list',
+    'response_time_list', 
+    'total_response_time', 
+    'average_response_time', 
+    'waiting_time_list',
+    'total_waiting_time',
+    'average_waiting_time', 
+    'idle_time_beginning_list', 
+    'idle_time_duration_list', 
+    'util', 
+    'num_jobs_list'
+])
 
 REPLICATIONS = [i for i in range(REPLICATION)]
 
+''' Store number of generated jobs and served jobs '''
 job_generated_list = {rep: 0 for rep in REPLICATIONS}
 job_served_list = {rep: 0 for rep in REPLICATIONS}
+
+''' Store arrivale time of all jobs '''
 arrival_time_lists = {rep: list() for rep in REPLICATIONS}
+
+''' Store response time of all served jobs '''
+response_time_lists = {rep: list() for rep in REPLICATIONS}
+total_response_time_list = {rep: 0 for rep in REPLICATIONS}
+average_response_time_list = {rep: 0 for rep in REPLICATIONS}
+
+''' Store waiting time of all served jobs '''
 waiting_time_lists = {rep: list() for rep in REPLICATIONS}
 total_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
 average_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
 
+''' Store ilde interval of server '''
 idle_time_beginning_lists = {rep: list() for rep in REPLICATIONS}
 idle_time_duration_lists = {rep: list() for rep in REPLICATIONS}
 
 util_list = {rep: 0 for rep in REPLICATIONS}
 num_jobs_lists = {rep: list() for rep in REPLICATIONS}
-#queue_lengths_list_list = {rep: {'Time': [], 'Length': []} for rep in REPLICATIONS}
 
-replications = Replications(job_generated_list, job_served_list, arrival_time_lists, waiting_time_lists, total_waiting_time_list,
- average_waiting_time_list, idle_time_beginning_lists, idle_time_duration_lists, util_list, num_jobs_lists)
+replications = Replications(job_generated_list, 
+    job_served_list, arrival_time_lists, 
+    response_time_lists, 
+    total_response_time_list,
+    average_response_time_list, 
+    waiting_time_lists, 
+    total_waiting_time_list, 
+    average_waiting_time_list, 
+    idle_time_beginning_lists, 
+    idle_time_duration_lists, 
+    util_list, 
+    num_jobs_lists
+)
 '''
 #####################################################################################################
 '''
@@ -226,8 +275,9 @@ replications = Replications(job_generated_list, job_served_list, arrival_time_li
 -----------------------------------------RUN THE SIMULATION------------------------------------------
 #####################################################################################################
 '''
+print("\n-------------------------------------RUN THE SIMULATION------------------------------------")
 for i in range(REPLICATION):
-    print("Turn %d" % (i + 1))
+    print("Rep %d" % (i + 1))
     np.random.seed(RANDOM_SEED + i)
 
     env = simpy.Environment()
@@ -239,9 +289,8 @@ for i in range(REPLICATION):
     env.run(until = MAX_SIMULATE_TIME + 1)
     #End simulating
 
-
-    replications.total_waiting_time[i] = np.sum(replications.waiting_time_list[i])
-    replications.average_waiting_time[i] = replications.total_waiting_time[i] / replications.job_served[i]
+    replications.total_response_time[i] = np.sum(replications.response_time_list[i])
+    replications.average_response_time[i] = replications.total_response_time[i] / replications.job_served[i]
 '''
 #####################################################################################################
 '''
@@ -252,18 +301,17 @@ for i in range(REPLICATION):
 ------------------------------------------RAW DATA ANALYSIS------------------------------------------
 #####################################################################################################
 '''
-print('\nRAW DATA ANALYSIS:')
+print("\n-------------------------------------RAW DATA ANALYSIS------------------------------------")
 print("Simulation time:         %d" % MAX_SIMULATE_TIME)
 for i in range(REPLICATION):
-    print("Turn %d" % (i + 1))
+    print("Rep %d" % (i + 1))
     temp = 0
     for duration in replications.idle_time_duration_list[i]:
         temp += duration
     replications.util[i] = (1.0 - temp / MAX_SIMULATE_TIME)
     print("\tTotal of jobs generated:           %d" % replications.job_generated[i])
-    print("\tTotal jobs served:              %d" % replications.job_served[i])
-    print("\tTotal waiting time:                %d" % replications.total_waiting_time[i])
-    print("\tAverage waiting time:              %.4f" % (replications.total_waiting_time[i] / replications.job_served[i]))
+    print("\tTotal jobs served:                 %d" % replications.job_served[i])
+    print("\tAverage response time:             %.4f" % replications.average_response_time[i])
     print("\tUtilization:                       %.4f" % replications.util[i])
     print("----------------------------------------------------------------------------------------")
 '''
@@ -316,18 +364,18 @@ plt.plot(r)
 -------------------------------TRANSIENT REMOVAL BY INIT DATA DELETION-------------------------------
 #####################################################################################################
 '''
-# Calculate the relative change
+''' Calculate the relative change '''
 relative_change = np.zeros(MAX_SIMULATE_TIME)
 for i in range(0, MAX_SIMULATE_TIME):
     relative_change[i] = (r[i] - average_q) / average_q
 
-#Get "knee" point: we can consider as local maxima-----------------------------------------------------------
+''' Get "knee" point: we can consider as local maxima '''
 range_simulation = range(0, MAX_SIMULATE_TIME)
 local_max = KneeLocator(range_simulation, relative_change, curve = 'concave', direction = 'increasing').knee
 
 initial_removal_time = local_max
 print("\nKnee point: %d" % initial_removal_time)
-#Init data deletion------------------------------------------------------------------------------------------
+'''Init data deletion'''
 plt.subplot(2, 2, 4)
 plt.title("Relative change")
 plt.xlabel("Time")
@@ -344,15 +392,19 @@ dict(facecolor='red', shrink=0.03),)
 
 '''
 #####################################################################################################
---------------------------TERMINATING REPLICATION BY INDEPENDENT REPLICATION-------------------------
+--------------------------------DATA ANALYSIS AFTER TRANSIENT REMOVAL--------------------------------
 #####################################################################################################
 '''
-N0 = initial_removal_time
-average_ql = np.zeros(REPLICATION)
+# N0 = initial_removal_time
+average_response_time = np.zeros(REPLICATION)
+average_waiting_time = np.zeros(REPLICATION)
+average_jobs_in_server = np.zeros(REPLICATION)
 
 print("AFTER TRANSIENT REMOVAL:")
 for i in range(REPLICATION):
-    print("\tTurn %d" % (i + 1))
+    print("Turn %d" % (i + 1))
+
+    ''' Find the index of the first job after the transient'''
     idx = 0
     while idx < len(replications.arrival_time_list[i]):
         if replications.arrival_time_list[i][idx] > initial_removal_time:
@@ -360,12 +412,17 @@ for i in range(REPLICATION):
         else:
             idx += 1
 
-    # average_ql[i] = np.sum(replications.num_jobs_list[i][N0:]) / (MAX_SIMULATE_TIME + 1 - N0)
-    # print("\tAverage jobs in server:                %f" % average_ql[i])
-    total_waiting_time = np.sum(replications.waiting_time_list[i][idx:])
-    total_job_served = replications.job_served[i] - (idx + 1)
-    average_waiting_time = total_waiting_time / total_job_served
+    ''' Recalculate mean response time and mean waiting time'''
+    total_response_time = np.sum(replications.response_time_list[i][idx:])
+    average_jobs_in_server[i] = total_response_time / MAX_SIMULATE_TIME
 
+    total_job_served = replications.job_served[i] - (idx + 1)
+    average_response_time[i] = total_response_time / total_job_served
+
+    total_waiting_time = np.sum(replications.waiting_time_list[i][idx:])
+    average_waiting_time[i] = total_waiting_time / total_job_served
+
+    ''' Find the index of the first idle interval after transient and recalculate the utilization of server'''
     idx = 0
     while idx < len(replications.idle_time_beginning_list[i]):
         if replications.idle_time_beginning_list[i][idx] > initial_removal_time:
@@ -374,16 +431,16 @@ for i in range(REPLICATION):
             idx += 1
     total_idle_time = np.sum(replications.idle_time_duration_list[i][idx:])
 
-    average_ql[i] = total_waiting_time/MAX_SIMULATE_TIME
-
-    print("\ttotal jobs served:                     %d" % total_job_served)
-    print("\tTotal waiting time:                    %d" % total_waiting_time)
-    print("\tAverage waiting time:                  %.4f" % (average_waiting_time))
+    print("\tTotal jobs served:                     %d" % total_job_served)
+    print("\tAverage response time:                 %.4f" % (average_response_time[i]))
+    print("\tAverage waiting time:                  %.4f" % (average_waiting_time[i]))
+    print("\tAverage jobs in system:                %.4f" % average_jobs_in_server[i])
     print("\tUtilization:                           %.4f" % (1 - total_idle_time / (MAX_SIMULATE_TIME - initial_removal_time)))
     print("----------------------------------------------------------------------------------------")
-    print("\tAverage jobs in system:                %.4f" % (mean_jobs_system))
 
-print("Average jobs of all replications:            %.4f" % (np.sum(average_ql) / REPLICATION))
+print("Average jobs in system of all replications:      %.4f" % (np.sum(average_jobs_in_server) / REPLICATION))
+print("Average response time of all replications        %.4f" % (np.sum(average_response_time) / REPLICATION))
+print("Average waiting time of all replications         %.4f" % (np.sum(average_waiting_time) / REPLICATION))
 '''
 #####################################################################################################
 '''
@@ -398,17 +455,17 @@ interval = np.zeros(2)
 overall_mean_reps = 0
 variance = 0
 Z = 0
-overall_mean_reps = np.sum(average_ql) / REPLICATION
+overall_mean_reps = np.sum(average_jobs_in_server) / REPLICATION
 
 
 for i in range(REPLICATION):
-   variance += pow(average_ql[i] - overall_mean_reps , 2)
+   variance += pow(average_jobs_in_server[i] - overall_mean_reps , 2)
 variance = variance / (REPLICATION - 1)
 Z = norm.ppf(1 - ALPHA/2)
 interval[0] = overall_mean_reps - Z * np.sqrt(variance)
 interval[1] = overall_mean_reps + Z * np.sqrt(variance)
 print("\nFINAL CONDITIONS:")
-print("\tOverall mean replications:                 %f " %overall_mean_reps)
+print("\tOverall mean of queue length among all replications:                 %f " %overall_mean_reps)
 print("\tVariance:                                  %f" %variance)
 print("\tConfidence Interval                        (%.4f : %.4f)" % (interval[0], interval[1]))
 print("----------------------------------------------------------------------------------------")
