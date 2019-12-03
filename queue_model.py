@@ -10,18 +10,34 @@ import time
 
 
 '''PARAMETERS'''
-MAX_SIMULATE_TIME = 100000 # Maximum running time
-LAMBDA = 2.0000000 # mean arrival time
-MU = 2.000001 # mean service rate of server
+MAX_SIMULATE_TIME = 20000 # Maximum running time
+LAMBDA = 0.1# Mean arrival rate
+MU = 0.5 # Mean service rate of server
 POPULATION = 100000000 # Total jobs available to generate = infinity
 BUFFER = 100000000 # Maximum number of jobs the server can store in its queue length
-REPLICATION = 5 # Number of replications
+REPLICATION = 4 # Number of replications
 ALPHA = 0.1 # 
 RANDOM_SEED = 4321 #Seed for random() function
+
+print("START PROGRAM")
 
 '''
 #####################################################################################################
 ---------------------------------------THEORETICAL CALCULATION---------------------------------------
+#####################################################################################################
+'''
+p = LAMBDA/MU
+p0 = 1- p
+mean_jobs_system = p / (1 - p)
+var_jobs_system = p / (1 - p) ** 2
+
+print("\n----------------------------------THEORETICAL CALCULATION---------------------------------")
+print("\tTrafic intensity:                          %.4f" %p)
+print("\tProbability of 0 jobs in the system:       %.4f" %p0)
+print("\tMean number of jobs in the system:         %.4f" %mean_jobs_system)
+print("\tVariance of number of jobs in the system:  %.4f" %var_jobs_system)
+print("----------------------------------------------------------------------------------------")
+'''
 #####################################################################################################
 '''
 
@@ -159,7 +175,11 @@ class Monitor:
 
     def monitor(self):
         while True:
-            replications.queue_lengths_list[self.rep].append(self.server.queue_length)
+            if self.server.queue_length > 0:
+                num_jobs = self.server.queue_length
+            else:
+                num_jobs = 0
+            replications.num_jobs_list[self.rep].append(self.server.queue_length)
             yield self.env.timeout(1)
 '''
 #####################################################################################################
@@ -170,33 +190,32 @@ class Monitor:
 start_time = time.time()
 
 
-
 '''
 #####################################################################################################
 ---------------CREATE GLOBAL VARIABLE TO STORE DATA OF ALL REPLICATIONS IN SIMULATION----------------
 #####################################################################################################
 '''
 Replications = collections.namedtuple('Replication', ['job_generated', 'job_served', 'arrival_time_list', 'waiting_time_list', 
-'total_waiting_time', 'average_waiting_time', 'idle_time_beginning_list', 'idle_time_duration_list', 'util', 'queue_lengths_list' ])
+'total_waiting_time', 'average_waiting_time', 'idle_time_beginning_list', 'idle_time_duration_list', 'util', 'num_jobs_list'])
 
 REPLICATIONS = [i for i in range(REPLICATION)]
 
 job_generated_list = {rep: 0 for rep in REPLICATIONS}
 job_served_list = {rep: 0 for rep in REPLICATIONS}
-arrival_time_list_list = {rep: list() for rep in REPLICATIONS}
-waiting_time_list_list = {rep: list() for rep in REPLICATIONS}
+arrival_time_lists = {rep: list() for rep in REPLICATIONS}
+waiting_time_lists = {rep: list() for rep in REPLICATIONS}
 total_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
 average_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
 
-idle_time_beginning_list_list = {rep: list() for rep in REPLICATIONS}
-idle_time_duration_list_list = {rep: list() for rep in REPLICATIONS}
+idle_time_beginning_lists = {rep: list() for rep in REPLICATIONS}
+idle_time_duration_lists = {rep: list() for rep in REPLICATIONS}
 
 util_list = {rep: 0 for rep in REPLICATIONS}
-queue_lengths_list_list = {rep: list() for rep in REPLICATIONS}
+num_jobs_lists = {rep: list() for rep in REPLICATIONS}
 #queue_lengths_list_list = {rep: {'Time': [], 'Length': []} for rep in REPLICATIONS}
 
-replications = Replications(job_generated_list, job_served_list, arrival_time_list_list, waiting_time_list_list, total_waiting_time_list,
- average_waiting_time_list, idle_time_beginning_list_list, idle_time_duration_list_list, util_list, queue_lengths_list_list )
+replications = Replications(job_generated_list, job_served_list, arrival_time_lists, waiting_time_lists, total_waiting_time_list,
+ average_waiting_time_list, idle_time_beginning_lists, idle_time_duration_lists, util_list, num_jobs_lists)
 '''
 #####################################################################################################
 '''
@@ -233,7 +252,7 @@ for i in range(REPLICATION):
 ------------------------------------------RAW DATA ANALYSIS------------------------------------------
 #####################################################################################################
 '''
-print('Raw data analysis:')
+print('\nRAW DATA ANALYSIS:')
 print("Simulation time:         %d" % MAX_SIMULATE_TIME)
 for i in range(REPLICATION):
     print("Turn %d" % (i + 1))
@@ -241,12 +260,12 @@ for i in range(REPLICATION):
     for duration in replications.idle_time_duration_list[i]:
         temp += duration
     replications.util[i] = (1.0 - temp / MAX_SIMULATE_TIME)
-    print("\tNumber of job generated:     %d" % replications.job_generated[i])
-    print("\tNumber of job served:        %d" % replications.job_served[i])
-    print("\tTotal waiting time:          %d" % replications.total_waiting_time[i])
-    print("\tAverage waiting time:        %.4f" % (replications.total_waiting_time[i] / replications.job_served[i]))
-    print("\tUtilization:                 %.4f" % replications.util[i])
-    print("-----------------------------------------------------------")
+    print("\tTotal of jobs generated:           %d" % replications.job_generated[i])
+    print("\tTotal jobs served:              %d" % replications.job_served[i])
+    print("\tTotal waiting time:                %d" % replications.total_waiting_time[i])
+    print("\tAverage waiting time:              %.4f" % (replications.total_waiting_time[i] / replications.job_served[i]))
+    print("\tUtilization:                       %.4f" % replications.util[i])
+    print("----------------------------------------------------------------------------------------")
 '''
 #####################################################################################################
 '''
@@ -257,36 +276,40 @@ for i in range(REPLICATION):
 ----------------------------------VISUALIZE DATA OF ALL REPLICATION----------------------------------
 #####################################################################################################
 '''
+plt.subplot(2, 2, 1)
+plt.title("Individual replications")
+plt.xlabel("Time")
+plt.ylabel("Jobs")
 for i in range(REPLICATION):
-    plt.plot(replications.queue_lengths_list[i])
-    plt.subplot(2, 2, 1)
-    plt.title("Individual replications")
+    plt.plot(replications.num_jobs_list[i])
+    
 
 plt.subplot(2, 2, 2)
 plt.title("Mean across replication")
 plt.xlabel("Time")
-plt.ylabel("Queue length")
-average_queue_lengths = np.zeros(MAX_SIMULATE_TIME + 1)
+plt.ylabel("Jobs")
+average_num_jobs = np.zeros(MAX_SIMULATE_TIME + 1)
 for i in range(REPLICATION):
-    average_queue_lengths = np.add(average_queue_lengths, replications.queue_lengths_list[i])
-average_queue_lengths = average_queue_lengths / 4
-plt.plot(average_queue_lengths)
+    average_num_jobs = np.add(average_num_jobs, replications.num_jobs_list[i])
+average_num_jobs = average_num_jobs / 4
+plt.plot(average_num_jobs)
 
-average_q = np.sum(average_queue_lengths) / (MAX_SIMULATE_TIME + 1)
-print("Average queue length of all repplication:%.2f" % average_q)
+average_q = np.sum(average_num_jobs) / (MAX_SIMULATE_TIME + 1)
+print("Average jobs of all replications:        %.4f" % average_q)
 
 r = np.zeros(MAX_SIMULATE_TIME)
 #r[i] = np.sum(q[i:]) / (MAX_SIMULATE_TIME + 1 - i) for i in range(0, MAX_SIMULATE_TIME)
 for i in range(0, MAX_SIMULATE_TIME):
-    r[i] = np.sum(average_queue_lengths[i:]) / (MAX_SIMULATE_TIME + 1 - i)
+    r[i] = np.sum(average_num_jobs[i:]) / (MAX_SIMULATE_TIME + 1 - i)
 plt.subplot(2, 2, 3)
 plt.title("Mean of last n-l replications")
 plt.xlabel("Time")
-plt.ylabel("Queue length")
+plt.ylabel("Jobs")
 plt.plot(r)
 '''
 #####################################################################################################
 '''
+
 
 '''
 #####################################################################################################
@@ -303,7 +326,7 @@ range_simulation = range(0, MAX_SIMULATE_TIME)
 local_max = KneeLocator(range_simulation, relative_change, curve = 'concave', direction = 'increasing').knee
 
 initial_removal_time = local_max
-print("Knee point: %d" % initial_removal_time)
+print("\nKnee point: %d" % initial_removal_time)
 #Init data deletion------------------------------------------------------------------------------------------
 plt.subplot(2, 2, 4)
 plt.title("Relative change")
@@ -313,6 +336,7 @@ plt.plot(relative_change)
 plt.annotate('local maxima', xy=(initial_removal_time, relative_change[initial_removal_time]),
 xytext=(initial_removal_time, relative_change[initial_removal_time] + 0.1), arrowprops=
 dict(facecolor='red', shrink=0.03),)
+
 '''
 #####################################################################################################
 '''
@@ -326,7 +350,7 @@ dict(facecolor='red', shrink=0.03),)
 N0 = initial_removal_time
 average_ql = np.zeros(REPLICATION)
 
-print("After transient removal:")
+print("AFTER TRANSIENT REMOVAL:")
 for i in range(REPLICATION):
     print("\tTurn %d" % (i + 1))
     idx = 0
@@ -336,9 +360,8 @@ for i in range(REPLICATION):
         else:
             idx += 1
 
-    average_ql[i] = np.sum(replications.queue_lengths_list[i][N0:]) / (MAX_SIMULATE_TIME + 1 - N0)
-    print("\tAverage length queue:              %f" % average_ql[i])
-
+    # average_ql[i] = np.sum(replications.num_jobs_list[i][N0:]) / (MAX_SIMULATE_TIME + 1 - N0)
+    # print("\tAverage jobs in server:                %f" % average_ql[i])
     total_waiting_time = np.sum(replications.waiting_time_list[i][idx:])
     total_job_served = replications.job_served[i] - (idx + 1)
     average_waiting_time = total_waiting_time / total_job_served
@@ -351,11 +374,16 @@ for i in range(REPLICATION):
             idx += 1
     total_idle_time = np.sum(replications.idle_time_duration_list[i][idx:])
 
-    print("\tNumber of job served:              %d" % total_job_served)
-    print("\tTotal waiting time:                %d" % total_waiting_time)
-    print("\tAverage waiting time:              %.4f" % (average_waiting_time))
-    print("\tUtilization:                       %.4f" % (1 - total_idle_time / (MAX_SIMULATE_TIME - initial_removal_time)))
-    print("-----------------------------------------------------------")
+    average_ql[i] = total_waiting_time/MAX_SIMULATE_TIME
+
+    print("\ttotal jobs served:                     %d" % total_job_served)
+    print("\tTotal waiting time:                    %d" % total_waiting_time)
+    print("\tAverage waiting time:                  %.4f" % (average_waiting_time))
+    print("\tUtilization:                           %.4f" % (1 - total_idle_time / (MAX_SIMULATE_TIME - initial_removal_time)))
+    print("----------------------------------------------------------------------------------------")
+    print("\tAverage jobs in system:                %.4f" % (mean_jobs_system))
+
+print("Average jobs of all replications:            %.4f" % (np.sum(average_ql) / REPLICATION))
 '''
 #####################################################################################################
 '''
@@ -379,16 +407,18 @@ variance = variance / (REPLICATION - 1)
 Z = norm.ppf(1 - ALPHA/2)
 interval[0] = overall_mean_reps - Z * np.sqrt(variance)
 interval[1] = overall_mean_reps + Z * np.sqrt(variance)
-print("FINAL CONDITIONS")
-print("\tOverall mean replications:             %f " %overall_mean_reps)
-print("\tVariance:                              %f" %variance)
-print("\tConfidence Interval                    (%.4f : %.4f)" % (interval[0], interval[1]))
+print("\nFINAL CONDITIONS:")
+print("\tOverall mean replications:                 %f " %overall_mean_reps)
+print("\tVariance:                                  %f" %variance)
+print("\tConfidence Interval                        (%.4f : %.4f)" % (interval[0], interval[1]))
+print("----------------------------------------------------------------------------------------")
 '''
 #####################################################################################################
 '''
 
 exe = time.time()-start_time
-print("Total executed time                      %.4f" % exe)
-print("Finish")
+print("Total executed time                          %.4f" % exe)
+print("FINISH PROGRAM")
 
 plt.show()
+
