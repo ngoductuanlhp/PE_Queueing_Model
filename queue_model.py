@@ -12,7 +12,7 @@ import time
 '''PARAMETERS'''
 MAX_SIMULATE_TIME = 20000 # Maximum running time
 LAMBDA = 2.0# Mean arrival rate
-MU = 2.5 # Mean service rate of server
+MU = 3 # Mean service rate of server
 POPULATION = 100000000 # Total jobs available to generate = infinity
 BUFFER = 100000000 # Maximum number of jobs the server can store in its queue length
 REPLICATION = 4 # Number of replications
@@ -41,7 +41,7 @@ var_waiting_time = (2-p)*(p*(MU**2*(1-p)**2))
 
 print("\n----------------------------------THEORETICAL CALCULATION---------------------------------")
 print("\tTrafic intensity:                          %.4f" %p)
-print("\tProbability of 0 jobs in the system:       %.4f" %p0)
+# print("\tProbability of 0 jobs in the system:       %.4f" %p0)
 print("\tMean number of jobs in the system:         %.4f" %mean_jobs_system)
 print("\tVariance of number of jobs in the system:  %.4f" %var_jobs_system)
 # print("\tMean number of jobs in queue:              %.4f" %mean_jobs_queue)
@@ -214,12 +214,8 @@ Replications = collections.namedtuple('Replication', [
     'job_generated', 
     'job_served', 
     'arrival_time_list',
-    'response_time_list', 
-    'total_response_time', 
-    'average_response_time', 
+    'response_time_list',
     'waiting_time_list',
-    'total_waiting_time',
-    'average_waiting_time', 
     'idle_time_beginning_list', 
     'idle_time_duration_list', 
     'util', 
@@ -237,13 +233,11 @@ arrival_time_lists = {rep: list() for rep in REPLICATIONS}
 
 ''' Store response time of all served jobs '''
 response_time_lists = {rep: list() for rep in REPLICATIONS}
-total_response_time_list = {rep: 0 for rep in REPLICATIONS}
-average_response_time_list = {rep: 0 for rep in REPLICATIONS}
+# total_response_time_list = {rep: 0 for rep in REPLICATIONS}
+# average_response_time_list = {rep: 0 for rep in REPLICATIONS}
 
 ''' Store waiting time of all served jobs '''
 waiting_time_lists = {rep: list() for rep in REPLICATIONS}
-total_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
-average_waiting_time_list = {rep: 0 for rep in REPLICATIONS}
 
 ''' Store ilde interval of server '''
 idle_time_beginning_lists = {rep: list() for rep in REPLICATIONS}
@@ -254,12 +248,8 @@ num_jobs_lists = {rep: list() for rep in REPLICATIONS}
 
 replications = Replications(job_generated_list, 
     job_served_list, arrival_time_lists, 
-    response_time_lists, 
-    total_response_time_list,
-    average_response_time_list, 
-    waiting_time_lists, 
-    total_waiting_time_list, 
-    average_waiting_time_list, 
+    response_time_lists,  
+    waiting_time_lists,  
     idle_time_beginning_lists, 
     idle_time_duration_lists, 
     util_list, 
@@ -289,8 +279,8 @@ for i in range(REPLICATION):
     env.run(until = MAX_SIMULATE_TIME + 1)
     #End simulating
 
-    replications.total_response_time[i] = np.sum(replications.response_time_list[i])
-    replications.average_response_time[i] = replications.total_response_time[i] / replications.job_served[i]
+    # replications.total_response_time[i] = np.sum(replications.response_time_list[i])
+    # replications.average_response_time[i] = replications.total_response_time[i] / replications.job_served[i]
 '''
 #####################################################################################################
 '''
@@ -311,7 +301,9 @@ for i in range(REPLICATION):
     replications.util[i] = (1.0 - temp / MAX_SIMULATE_TIME)
     print("\tTotal of jobs generated:           %d" % replications.job_generated[i])
     print("\tTotal jobs served:                 %d" % replications.job_served[i])
-    print("\tAverage response time:             %.4f" % replications.average_response_time[i])
+    print("\tAverage jobs in system:            %.4f" % (np.sum(replications.waiting_time_list[i]) / MAX_SIMULATE_TIME))
+    print("\tAverage response time:             %.4f" % (np.sum(replications.response_time_list[i]) / replications.job_served[i]))
+    print("\tAverage waiting time:              %.4f" % (np.sum(replications.waiting_time_list[i]) / replications.job_served[i]))
     print("\tUtilization:                       %.4f" % replications.util[i])
     print("----------------------------------------------------------------------------------------")
 '''
